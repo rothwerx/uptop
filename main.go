@@ -3,9 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"html/template"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -13,13 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
-
-const templ = `PID	Process Name	User		Swap	USS	PSS	RSS	Command
-{{- range .Items}}
-{{.PID}}	{{.Name}}		{{.User}}		{{.Swap}}	{{.USS}}	{{.PSS}}	{{.RSS}}	{{.Command}}
-{{- end}}
-`
 
 // Process holds information about a process
 type Process struct {
@@ -29,17 +22,18 @@ type Process struct {
 	RSS, PSS, USS, Swap int
 }
 
-// Container for Processes
-type allProcs struct {
+// AllProcs is a container for Processes
+type AllProcs struct {
 	Items []*Process
 }
 
 // UID->username map cache
 var ucache = make(map[uint32]string)
+
 var namergx = regexp.MustCompile(`\((.*?)\)`)
 
-// ScrapeSmaps sums select memory fields from /proc/<int>/smaps
-func (p *Process) ScrapeSmaps() error {
+// scrapeSmaps sums select memory fields from /proc/<int>/smaps
+func (p *Process) scrapeSmaps() error {
 	if p.Basepath == "" {
 		return fmt.Errorf("no path for Process")
 	}
@@ -71,7 +65,7 @@ func (p *Process) ScrapeSmaps() error {
 
 // PopulateInfo fills in the Process attributes
 func (p *Process) PopulateInfo() error {
-	if err := p.ScrapeSmaps(); err != nil {
+	if err := p.scrapeSmaps(); err != nil {
 		return err
 	}
 	p.Name = getProcName(p.Basepath)
@@ -83,6 +77,7 @@ func (p *Process) PopulateInfo() error {
 	return nil
 }
 
+// lookupUsername looks up username for uid if not already in cache
 func lookupUsername(file string) (string, error) {
 	fileInfo, err := os.Stat(file)
 	if err != nil {
@@ -100,6 +95,7 @@ func lookupUsername(file string) (string, error) {
 	return u.Username, nil
 }
 
+// getSmapMem is a helper function to read partictular values from smaps
 func getSmapMem(line, mment string) int {
 	if strings.HasPrefix(line, mment) {
 		f, err := strconv.Atoi(strings.Fields(line)[1])
@@ -121,6 +117,7 @@ func isProc(path string) bool {
 	return true
 }
 
+// Get process name from stat file
 func getProcName(path string) string {
 	namepath := filepath.Join(path, "stat")
 	statp, err := ioutil.ReadFile(namepath)
@@ -139,11 +136,12 @@ func getCmdline(path string) string {
 		fmt.Printf("read error [%v]\n", err)
 	}
 	cmdstring := string(cmdline)
-	return strings.Replace(cmdstring, "\x00", "", -1)
+	return strings.Replace(cmdstring, "\x00", " ", -1)
 }
 
-func userSpaceDirs(rootpath string) allProcs {
-	box := allProcs{}
+// GetProcesses returns a collection of Processes
+func GetProcesses(rootpath string) AllProcs {
+	box := AllProcs{}
 	dirs, err := ioutil.ReadDir(rootpath)
 	if err != nil {
 		fmt.Printf("readdir error [%v]\n", err)
@@ -165,10 +163,16 @@ func userSpaceDirs(rootpath string) allProcs {
 }
 
 func main() {
-	dirs := userSpaceDirs("/proc")
+	start := time.Now()
+	procs := GetProcesses("/proc")
 
-	report := template.Must(template.New("report").Parse(templ))
-	if err := report.Execute(os.Stdout, dirs); err != nil {
-		log.Fatal(err)
+	// Print header and then the contents of each Process
+	fmt.Printf("%6s  %-16s %-14s %5s  %5s  %5s  %5s  %-80s\n",
+		"PID", "Name", "User", "Swap", "USS", "PSS", "RSS", "Command")
+	for _, p := range procs.Items {
+		fmt.Printf("%6d  %-16s %-14s %5d  %5d  %5d  %5d  %-80s\n",
+			p.PID, p.Name, p.User, p.Swap, p.USS, p.PSS, p.RSS, p.Command)
 	}
+	elapsed := time.Since(start)
+	fmt.Printf("Took %s to collect\n", elapsed)
 }
