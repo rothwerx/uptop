@@ -74,7 +74,6 @@ func (p *Process) PopulateInfo() error {
 	if err := p.ScrapeSmaps(); err != nil {
 		return err
 	}
-	p.Command = string(getCmdline(p.Basepath))
 	p.Name = getProcName(p.Basepath)
 	user, err := lookupUsername(p.Basepath)
 	if err != nil {
@@ -112,21 +111,6 @@ func getSmapMem(line, mment string) int {
 	return 0
 }
 
-func userSpaceDirs(rootpath string) []string {
-	list := make([]string, 0, 10)
-	dirs, err := ioutil.ReadDir(rootpath)
-	if err != nil {
-		fmt.Printf("readdir error [%v]\n", err)
-	}
-	for _, f := range dirs {
-		fname := filepath.Join(rootpath, f.Name())
-		if isProc(fname) && getCmdline(fname) != "" {
-			list = append(list, fname)
-		}
-	}
-	return list
-}
-
 // Determine if it's a process dir by checking if the dirname is an int
 func isProc(path string) bool {
 	basename := filepath.Base(path)
@@ -158,20 +142,33 @@ func getCmdline(path string) string {
 	return strings.Replace(cmdstring, "\x00", "", -1)
 }
 
+func userSpaceDirs(rootpath string) allProcs {
+	box := allProcs{}
+	dirs, err := ioutil.ReadDir(rootpath)
+	if err != nil {
+		fmt.Printf("readdir error [%v]\n", err)
+	}
+	for _, f := range dirs {
+		fname := filepath.Join(rootpath, f.Name())
+		if isProc(fname) {
+			cmdline := getCmdline(fname)
+			if cmdline != "" {
+				p := &Process{Basepath: fname, Command: cmdline}
+				if err := p.PopulateInfo(); err != nil {
+					fmt.Printf("error in PopulateInfo [%v]\n", err)
+				}
+				box.Items = append(box.Items, p)
+			}
+		}
+	}
+	return box
+}
+
 func main() {
 	dirs := userSpaceDirs("/proc")
-	box := allProcs{}
 
-	for _, dir := range dirs {
-		v := &Process{Basepath: dir}
-		err := v.PopulateInfo()
-		if err != nil {
-			fmt.Println("Error in ScrapeSmaps")
-		}
-		box.Items = append(box.Items, v)
-	}
 	report := template.Must(template.New("report").Parse(templ))
-	if err := report.Execute(os.Stdout, box); err != nil {
+	if err := report.Execute(os.Stdout, dirs); err != nil {
 		log.Fatal(err)
 	}
 }
