@@ -149,12 +149,8 @@ func GetProcesses(rootpath string) AllProcs {
 	for _, f := range dirs {
 		fname := filepath.Join(rootpath, f.Name())
 		if isProc(fname) {
-			cmdline := getCmdline(fname)
-			if cmdline != "" {
-				p := &Process{Basepath: fname, Command: cmdline}
-				if err := p.PopulateInfo(); err != nil {
-					fmt.Printf("error in PopulateInfo [%v]\n", err)
-				}
+			p, ok := processIt(fname)
+			if ok {
 				box.Items = append(box.Items, p)
 			}
 		}
@@ -162,17 +158,33 @@ func GetProcesses(rootpath string) AllProcs {
 	return box
 }
 
-func main() {
-	start := time.Now()
-	procs := GetProcesses("/proc")
+// processIt returns a populated Process
+func processIt(fpath string) (*Process, bool) {
+	cmdline := getCmdline(fpath)
+	if cmdline != "" {
+		p := &Process{Basepath: fpath, Command: cmdline}
+		if err := p.PopulateInfo(); err != nil {
+			return nil, false
+		}
+		return p, true
+	}
+	return nil, false
+}
 
+func printProcesses(a AllProcs) {
 	// Print header and then the contents of each Process
 	fmt.Printf("%6s  %-16s %-14s %5s  %5s  %5s  %5s  %-80s\n",
 		"PID", "Name", "User", "Swap", "USS", "PSS", "RSS", "Command")
-	for _, p := range procs.Items {
+	for _, p := range a.Items {
 		fmt.Printf("%6d  %-16s %-14s %5d  %5d  %5d  %5d  %-80s\n",
 			p.PID, p.Name, p.User, p.Swap, p.USS, p.PSS, p.RSS, p.Command)
 	}
+}
+
+func main() {
+	start := time.Now()
+	procs := GetProcesses("/proc")
+	printProcesses(procs)
 	elapsed := time.Since(start)
-	fmt.Printf("Took %s to collect\n", elapsed)
+	fmt.Printf("Took %s to collect %d processes\n", elapsed, len(procs.Items))
 }
