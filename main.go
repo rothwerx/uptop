@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -11,7 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
+
+	ui "github.com/gizak/termui"
 )
 
 // Process holds information about a process
@@ -181,10 +183,72 @@ func printProcesses(a AllProcs) {
 	}
 }
 
-func main() {
-	start := time.Now()
+func tableFormat(a AllProcs) [][]string {
+	tab := [][]string{[]string{"PID", "Name", "User", "Swap", "USS", "PSS", "RSS", "Command"},
+		[]string{"---", "----", "----", "----", "---", "---", "---", "-------"}}
+	for _, p := range a.Items {
+		tab = append(tab, []string{strconv.Itoa(p.PID), p.Name, p.User, strconv.Itoa(p.Swap),
+			strconv.Itoa(p.USS), strconv.Itoa(p.PSS), strconv.Itoa(p.RSS), p.Command})
+	}
+	return tab
+}
+
+func runTermui() {
+	if err := ui.Init(); err != nil {
+		log.Fatalln("cannot initialize termui")
+	}
+	defer ui.Close()
+
 	procs := GetProcesses("/proc")
-	printProcesses(procs)
-	elapsed := time.Since(start)
-	fmt.Printf("Took %s to collect %d processes\n", elapsed, len(procs.Items))
+
+	tb := ui.NewTable()
+	tb.Rows = tableFormat(procs)
+	tb.Y = 0
+	tb.X = 0
+	tb.Separator = false
+	tb.Border = false
+	tb.Height = ui.TermHeight()
+	tb.Width = ui.TermWidth()
+
+	ui.Render(tb)
+
+	// When the window resizes, the grid must adopt to the new size.
+	ui.Handle("/sys/wnd/resize", func(ui.Event) {
+		// Update the heights of list box and output box.
+		tb.Height = ui.TermHeight()
+		ui.Body.Width = ui.TermWidth()
+		ui.Body.Align()
+		ui.Render(tb)
+	})
+
+	// "q" or Ctrl-c stops the event loop.
+	ui.Handle("/sys/kbd/q", func(ui.Event) {
+		ui.StopLoop()
+	})
+	ui.Handle("/sys/kbd/C-c", func(ui.Event) {
+		ui.StopLoop()
+	})
+
+	// Effective 2s refresh
+	ui.Handle("/timer/1s", func(e ui.Event) {
+		t := e.Data.(ui.EvtTimer)
+		if t.Count%2 == 0 {
+			procs := GetProcesses("/proc")
+			tb.Rows = tableFormat(procs)
+			ui.Render(tb)
+		}
+	})
+
+	ui.Handle("/sys/kbd/r", func(ui.Event) {
+		procs := GetProcesses("/proc")
+		tb.Rows = tableFormat(procs)
+		ui.Render(tb)
+	})
+
+	// start the event loop.
+	ui.Loop()
+}
+
+func main() {
+	runTermui()
 }
