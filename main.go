@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -9,12 +10,25 @@ import (
 	"os/user"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 
 	ui "github.com/gizak/termui"
 )
+
+// Program version
+const version = "0.1"
+
+// UID->username map cache
+var ucache = make(map[uint32]string)
+
+// Regex to get the process name out of stat file
+var namergx = regexp.MustCompile(`\((.*?)\)`)
+
+// Default sort key
+var sortKey = "rss"
 
 // Process holds information about a process
 type Process struct {
@@ -23,16 +37,6 @@ type Process struct {
 	Name, User, Command string
 	RSS, PSS, USS, Swap int
 }
-
-// AllProcs is a container for Processes
-type AllProcs struct {
-	Items []*Process
-}
-
-// UID->username map cache
-var ucache = make(map[uint32]string)
-
-var namergx = regexp.MustCompile(`\((.*?)\)`)
 
 // scrapeSmaps sums select memory fields from /proc/<int>/smaps
 func (p *Process) scrapeSmaps() error {
@@ -97,7 +101,7 @@ func lookupUsername(file string) (string, error) {
 	return u.Username, nil
 }
 
-// getSmapMem is a helper function to read partictular values from smaps
+// getSmapMem is a helper function to read particular values from smaps
 func getSmapMem(line, mment string) int {
 	if strings.HasPrefix(line, mment) {
 		f, err := strconv.Atoi(strings.Fields(line)[1])
@@ -142,8 +146,8 @@ func getCmdline(path string) string {
 }
 
 // GetProcesses returns a collection of Processes
-func GetProcesses(rootpath string) AllProcs {
-	box := AllProcs{}
+func GetProcesses(rootpath string) []*Process {
+	box := []*Process{}
 	dirs, err := ioutil.ReadDir(rootpath)
 	if err != nil {
 		fmt.Printf("readdir error [%v]\n", err)
@@ -153,14 +157,25 @@ func GetProcesses(rootpath string) AllProcs {
 		if isProc(fname) {
 			p, ok := processIt(fname)
 			if ok {
-				box.Items = append(box.Items, p)
+				box = append(box, p)
 			}
 		}
+	}
+	// Name sorts ascending, all else sorts descending
+	switch sortKey {
+	case "name":
+		sort.Slice(box, func(i, j int) bool { return box[i].Name < box[j].Name })
+	case "rss":
+		sort.Slice(box, func(i, j int) bool { return box[i].RSS > box[j].RSS })
+	case "pss":
+		sort.Slice(box, func(i, j int) bool { return box[i].PSS > box[j].PSS })
+	case "uss":
+		sort.Slice(box, func(i, j int) bool { return box[i].USS > box[j].USS })
 	}
 	return box
 }
 
-// processIt returns a populated Process
+// processIt returns a populated Process pointer
 func processIt(fpath string) (*Process, bool) {
 	cmdline := getCmdline(fpath)
 	if cmdline != "" {
@@ -173,20 +188,21 @@ func processIt(fpath string) (*Process, bool) {
 	return nil, false
 }
 
-func printProcesses(a AllProcs) {
-	// Print header and then the contents of each Process
-	fmt.Printf("%6s  %-16s %-14s %5s  %5s  %5s  %5s  %-80s\n",
+// Print header and then the contents of each Process
+func printProcesses(a []*Process) {
+	fmt.Printf("%6s  %-16s %-14s %5s  %5s  %5s  %5s  %-80s",
 		"PID", "Name", "User", "Swap", "USS", "PSS", "RSS", "Command")
-	for _, p := range a.Items {
-		fmt.Printf("%6d  %-16s %-14s %5d  %5d  %5d  %5d  %-80s\n",
+	for _, p := range a {
+		fmt.Printf("%6d  %-16s %-14s %5d  %5d  %5d  %5d  %-80s",
 			p.PID, p.Name, p.User, p.Swap, p.USS, p.PSS, p.RSS, p.Command)
 	}
 }
 
-func tableFormat(a AllProcs) [][]string {
+// Formats the processes for the termui table
+func tableFormat(a []*Process) [][]string {
 	tab := [][]string{[]string{"PID", "Name", "User", "Swap", "USS", "PSS", "RSS", "Command"},
 		[]string{"---", "----", "----", "----", "---", "---", "---", "-------"}}
-	for _, p := range a.Items {
+	for _, p := range a {
 		tab = append(tab, []string{strconv.Itoa(p.PID), p.Name, p.User, strconv.Itoa(p.Swap),
 			strconv.Itoa(p.USS), strconv.Itoa(p.PSS), strconv.Itoa(p.RSS), p.Command})
 	}
@@ -211,6 +227,8 @@ func runTermui() {
 	tb.Width = ui.TermWidth()
 
 	ui.Render(tb)
+
+	// Event Handlers
 
 	// When the window resizes, the grid must adopt to the new size.
 	ui.Handle("/sys/wnd/resize", func(ui.Event) {
@@ -239,7 +257,30 @@ func runTermui() {
 		}
 	})
 
+	// "r" sorts by RSS
 	ui.Handle("/sys/kbd/r", func(ui.Event) {
+		sortKey = "rss"
+		procs := GetProcesses("/proc")
+		tb.Rows = tableFormat(procs)
+		ui.Render(tb)
+	})
+	// "u" sorts by USS
+	ui.Handle("/sys/kbd/u", func(ui.Event) {
+		sortKey = "uss"
+		procs := GetProcesses("/proc")
+		tb.Rows = tableFormat(procs)
+		ui.Render(tb)
+	})
+	// "p" sorts by PSS
+	ui.Handle("/sys/kbd/p", func(ui.Event) {
+		sortKey = "pss"
+		procs := GetProcesses("/proc")
+		tb.Rows = tableFormat(procs)
+		ui.Render(tb)
+	})
+	// "n" sorts by name
+	ui.Handle("/sys/kbd/n", func(ui.Event) {
+		sortKey = "name"
 		procs := GetProcesses("/proc")
 		tb.Rows = tableFormat(procs)
 		ui.Render(tb)
@@ -250,5 +291,18 @@ func runTermui() {
 }
 
 func main() {
+	wantVersion := flag.Bool("version", false, "Print the version")
+	wantOnce := flag.Bool("once", false, "Print table once and exit")
+	flag.StringVar(&sortKey, "sort", "rss", "Sort by name, rss, pss, or uss")
+	flag.Parse()
+	if *wantVersion {
+		fmt.Println(version)
+		os.Exit(0)
+	}
+	if *wantOnce {
+		procs := GetProcesses("/proc")
+		printProcesses(procs)
+		os.Exit(0)
+	}
 	runTermui()
 }
