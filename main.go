@@ -15,7 +15,7 @@ import (
 	"strings"
 	"syscall"
 
-	ui "github.com/gizak/termui"
+	ui "gopkg.in/gizak/termui.v2"
 )
 
 // Program version
