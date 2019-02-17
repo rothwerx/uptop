@@ -15,12 +15,17 @@ Until there's an official release, installation means building the (standalone) 
 
 Simply ensure uptop is executable, then run it in a terminal `./uptop`. Run with sudo to get more than just your own user processes.
 
-You can quit with 'q' or Ctrl-c. While `uptop` is running, 'p' will sort by PSS, 'u' will sort by USS, 'r' will sort by RSS, and 'n' will sort by process name.
+You can quit with 'q' or Ctrl-c. While `uptop` is running, 'p' will sort by PSS, 'u' will sort by USS, 'r' will sort by RSS, 's' will sort by SwapPSS, and 'n' will sort by process name.
 
 ## Development setup
 
-* Install Go (requires >= 1.8) [https://golang.org/doc/install](https://golang.org/doc/install)
+* Install Go (requires >= 1.11) [https://golang.org/doc/install](https://golang.org/doc/install)
 * `go get -u github.com/rothwerx/uptop`
+
+Since Go 1.11 introduced module versioning you'll want to enable the transitional variable to get termui. Change to the uptop source directory and run:
+`GO111MODULE=on go get -u github.com/gizak/termui@master`
+Older releases of termui will cause you headaches, and until termui stabilizes, termui@master will probably cause headaches too.
+
 
 ## Meta
 

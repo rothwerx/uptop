@@ -14,12 +14,14 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	ui "github.com/gizak/termui"
+	"github.com/gizak/termui/widgets"
 )
 
 // Program version
-const version = "0.1"
+const version = "0.2"
 
 // UID->username map cache
 var ucache = make(map[uint32]string)
@@ -62,7 +64,7 @@ func (p *Process) scrapeSmaps() error {
 		line := scanner.Text()
 		p.RSS += getSmapMem(line, "Rss")
 		p.PSS += getSmapMem(line, "Pss")
-		p.Swap += getSmapMem(line, "Swap")
+		p.Swap += getSmapMem(line, "SwapPss")
 		p.USS += getSmapMem(line, "Private_Clean")
 		p.USS += getSmapMem(line, "Private_Dirty")
 	}
@@ -128,9 +130,13 @@ func getProcName(path string) string {
 	namepath := filepath.Join(path, "stat")
 	statp, err := ioutil.ReadFile(namepath)
 	if err != nil {
-		fmt.Printf("error reading stat [%v]\n", err)
+		// fmt.Printf("error reading stat [%v]\n", err)
+		return ""
 	}
 	match := namergx.FindStringSubmatch(string(statp))
+	if len(match) < 2 {
+		return ""
+	}
 	return match[1]
 }
 
@@ -139,7 +145,8 @@ func getCmdline(path string) string {
 	cmdpath := filepath.Join(path, "cmdline")
 	cmdline, err := ioutil.ReadFile(cmdpath)
 	if err != nil {
-		fmt.Printf("read error [%v]\n", err)
+		//fmt.Printf("read error [%v]\n", err)
+		return ""
 	}
 	cmdstring := string(cmdline)
 	return strings.Replace(cmdstring, "\x00", " ", -1)
@@ -171,6 +178,8 @@ func GetProcesses(rootpath string) []*Process {
 		sort.Slice(box, func(i, j int) bool { return box[i].PSS > box[j].PSS })
 	case "uss":
 		sort.Slice(box, func(i, j int) bool { return box[i].USS > box[j].USS })
+	case "swap":
+		sort.Slice(box, func(i, j int) bool { return box[i].Swap > box[j].Swap })
 	}
 	return box
 }
@@ -200,8 +209,8 @@ func printProcesses(a []*Process) {
 
 // Formats the processes for the termui table
 func tableFormat(a []*Process) [][]string {
-	tab := [][]string{[]string{"PID", "Name", "User", "Swap", "USS", "PSS", "RSS", "Command"},
-		[]string{"---", "----", "----", "----", "---", "---", "---", "-------"}}
+	tab := [][]string{[]string{"PID", "Name", "User", "SwapPSS", "USS", "PSS", "RSS", "Command"},
+		[]string{"---", "----", "----", "----", "---", "------", "---", "-------"}}
 	for _, p := range a {
 		tab = append(tab, []string{strconv.Itoa(p.PID), p.Name, p.User, strconv.Itoa(p.Swap),
 			strconv.Itoa(p.USS), strconv.Itoa(p.PSS), strconv.Itoa(p.RSS), p.Command})
@@ -217,83 +226,71 @@ func runTermui() {
 
 	procs := GetProcesses("/proc")
 
-	tb := ui.NewTable()
-	tb.Rows = tableFormat(procs)
-	tb.Y = 0
-	tb.X = 0
-	tb.Separator = false
+	termWidth, termHeight := ui.TerminalDimensions()
+
+	tb := widgets.NewTable()
+	tb.RowSeparator = false
+	tb.SetRect(0, 0, termWidth, termHeight)
+	tb.BorderStyle = ui.NewStyle(ui.ColorBlack)
 	tb.Border = false
-	tb.Height = ui.TermHeight()
-	tb.Width = ui.TermWidth()
+	tb.ColumnWidths = []int{6, 18, 10, 8, 8, 8, 8, termWidth - 66}
+	tb.Rows = tableFormat(procs)
 
 	ui.Render(tb)
 
 	// Event Handlers
 
-	// When the window resizes, the grid must adopt to the new size.
-	ui.Handle("/sys/wnd/resize", func(ui.Event) {
-		// Update the heights of list box and output box.
-		tb.Height = ui.TermHeight()
-		ui.Body.Width = ui.TermWidth()
-		ui.Body.Align()
-		ui.Render(tb)
-	})
+	uiEvents := ui.PollEvents()
+	ticker := time.NewTicker(time.Second).C
+	for {
+		select {
+		case e := <-uiEvents:
+			switch e.ID {
+			case "q", "<C-c>":
+				return
+			case "r":
+				sortKey = "rss"
+				procs := GetProcesses("/proc")
+				tb.Rows = tableFormat(procs)
+				ui.Render(tb)
+			case "u":
+				sortKey = "uss"
+				procs := GetProcesses("/proc")
+				tb.Rows = tableFormat(procs)
+				ui.Render(tb)
+			case "p":
+				sortKey = "pss"
+				procs := GetProcesses("/proc")
+				tb.Rows = tableFormat(procs)
+				ui.Render(tb)
+			case "n":
+				sortKey = "name"
+				procs := GetProcesses("/proc")
+				tb.Rows = tableFormat(procs)
+				ui.Render(tb)
+			case "s":
+				sortKey = "swap"
+				procs := GetProcesses("/proc")
+				tb.Rows = tableFormat(procs)
+				ui.Render(tb)
+			case "<Resize>":
+				payload := e.Payload.(ui.Resize)
+				width, height := payload.Width, payload.Height
+				tb.SetRect(0, 0, width, height)
+			}
 
-	// "q" or Ctrl-c stops the event loop.
-	ui.Handle("/sys/kbd/q", func(ui.Event) {
-		ui.StopLoop()
-	})
-	ui.Handle("/sys/kbd/C-c", func(ui.Event) {
-		ui.StopLoop()
-	})
-
-	// Effective 2s refresh
-	ui.Handle("/timer/1s", func(e ui.Event) {
-		t := e.Data.(ui.EvtTimer)
-		if t.Count%2 == 0 {
+		case <-ticker:
 			procs := GetProcesses("/proc")
 			tb.Rows = tableFormat(procs)
 			ui.Render(tb)
 		}
-	})
-
-	// "r" sorts by RSS
-	ui.Handle("/sys/kbd/r", func(ui.Event) {
-		sortKey = "rss"
-		procs := GetProcesses("/proc")
-		tb.Rows = tableFormat(procs)
-		ui.Render(tb)
-	})
-	// "u" sorts by USS
-	ui.Handle("/sys/kbd/u", func(ui.Event) {
-		sortKey = "uss"
-		procs := GetProcesses("/proc")
-		tb.Rows = tableFormat(procs)
-		ui.Render(tb)
-	})
-	// "p" sorts by PSS
-	ui.Handle("/sys/kbd/p", func(ui.Event) {
-		sortKey = "pss"
-		procs := GetProcesses("/proc")
-		tb.Rows = tableFormat(procs)
-		ui.Render(tb)
-	})
-	// "n" sorts by name
-	ui.Handle("/sys/kbd/n", func(ui.Event) {
-		sortKey = "name"
-		procs := GetProcesses("/proc")
-		tb.Rows = tableFormat(procs)
-		ui.Render(tb)
-	})
-
-	// start the event loop.
-	ui.Loop()
+	}
 }
 
 func main() {
 	wantVersion := flag.Bool("version", false, "Print the version")
 	wantOnce := flag.Bool("once", false, "Print table once and exit")
-	flag.StringVar(&sortKey, "sort", "rss", "Sort by name, rss, pss, or uss")
+	flag.StringVar(&sortKey, "sort", "rss", "Sort by name, rss, pss, swap, or uss")
 	flag.Parse()
 	if *wantVersion {
 		fmt.Println(version)
