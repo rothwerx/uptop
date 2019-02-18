@@ -21,7 +21,7 @@ import (
 )
 
 // Program version
-const version = "0.2"
+const version = "0.3"
 
 // UID->username map cache
 var ucache = make(map[uint32]string)
@@ -197,15 +197,16 @@ func processIt(fpath string) (*Process, bool) {
 	return nil, false
 }
 
+// Fix this
 // Print header and then the contents of each Process
-func printProcesses(a []*Process) {
-	fmt.Printf("%6s  %-16s %-14s %5s  %5s  %5s  %5s  %-80s",
-		"PID", "Name", "User", "Swap", "USS", "PSS", "RSS", "Command")
-	for _, p := range a {
-		fmt.Printf("%6d  %-16s %-14s %5d  %5d  %5d  %5d  %-80s",
-			p.PID, p.Name, p.User, p.Swap, p.USS, p.PSS, p.RSS, p.Command)
-	}
-}
+// func printProcesses(a []*Process) {
+// 	fmt.Printf("%6s  %-16s %-14s %5s  %5s  %5s  %5s  %-80s",
+// 		"PID", "Name", "User", "Swap", "USS", "PSS", "RSS", "Command")
+// 	for _, p := range a {
+// 		fmt.Printf("%6d  %-16s %-14s %5d  %5d  %5d  %5d  %-80s",
+// 			p.PID, p.Name, p.User, p.Swap, p.USS, p.PSS, p.RSS, p.Command)
+// 	}
+// }
 
 // Formats the processes for the termui table
 func tableFormat(a []*Process) [][]string {
@@ -288,18 +289,23 @@ func runTermui() {
 }
 
 func main() {
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Once running, hit n, r, p, s, or u to sort by Name, RSS, PSS, SwapPSS, or USS. RSS is default.\n")
+		flag.PrintDefaults()
+		os.Exit(0)
+	}
 	wantVersion := flag.Bool("version", false, "Print the version")
-	wantOnce := flag.Bool("once", false, "Print table once and exit")
-	flag.StringVar(&sortKey, "sort", "rss", "Sort by name, rss, pss, swap, or uss")
+	// wantOnce := flag.Bool("once", false, "Print table once and exit")
+	flag.StringVar(&sortKey, "sort", "rss", "Start sorted by name, rss, pss, swap, or uss")
 	flag.Parse()
 	if *wantVersion {
 		fmt.Println(version)
 		os.Exit(0)
 	}
-	if *wantOnce {
-		procs := GetProcesses("/proc")
-		printProcesses(procs)
-		os.Exit(0)
-	}
+	// if *wantOnce {
+	// 	procs := GetProcesses("/proc")
+	// 	printProcesses(procs)
+	// 	os.Exit(0)
+	// }
 	runTermui()
 }

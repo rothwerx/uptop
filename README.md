@@ -1,4 +1,4 @@
-# uptop
+# uptop [![Build Status](https://travis-ci.org/rothwerx/uptop.svg?branch=master)](https://travis-ci.org/rothwerx/uptop)
 > Top-like tool for displaying per-process USS (unique set size) and PSS (proportional set size) memory usage
 
 Standard Linux memory observation tools will show you the resident set size (RSS or RES) and virtual memory size (VMSIZE or VIRT) for each process, but neither are useful for giving you actual memory usage. RSS is more useful than VMSIZE as a general measurement, but RSS still includes the full memory consumed by each shared library. Here's a simplistic example: if you have 10 processes that each use 20kB of memory, and they all use the library foo.so which consumes 10kB of memory, each process will report 30kB memory usage even though foo.so only takes 10kB total.
