@@ -21,7 +21,7 @@ import (
 )
 
 // Program version
-const version = "0.3"
+const version = "1.0"
 
 // UID->username map cache
 var ucache = make(map[uint32]string)
