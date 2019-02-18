@@ -210,8 +210,8 @@ func processIt(fpath string) (*Process, bool) {
 
 // Formats the processes for the termui table
 func tableFormat(a []*Process) [][]string {
-	tab := [][]string{[]string{"PID", "Name", "User", "SwapPSS", "USS", "PSS", "RSS", "Command"},
-		[]string{"---", "----", "----", "----", "---", "------", "---", "-------"}}
+	tab := [][]string{{"PID", "Name", "User", "SwapPSS", "USS", "PSS", "RSS", "Command"},
+		{"---", "----", "----", "----", "---", "------", "---", "-------"}}
 	for _, p := range a {
 		tab = append(tab, []string{strconv.Itoa(p.PID), p.Name, p.User, strconv.Itoa(p.Swap),
 			strconv.Itoa(p.USS), strconv.Itoa(p.PSS), strconv.Itoa(p.RSS), p.Command})

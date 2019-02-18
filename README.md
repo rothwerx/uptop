@@ -9,7 +9,7 @@ Unique set size (USS) is the amount of memory that is unique to a process, i.e. 
 
 ## Installation
 
-Until there's an official release, installation means building the (standalone) binary. See Development setup below. NOTE: this is Linux-only, and kernel version >= 2.6.27 at that.
+See Development setup below, or download the [binary](https://github.com/rothwerx/uptop/releases). NOTE: this is Linux-only, and kernel version >= 2.6.27 at that.
 
 ## Usage example
 
@@ -19,7 +19,7 @@ You can quit with 'q' or Ctrl-c. While `uptop` is running, 'p' will sort by PSS,
 
 ## Development setup
 
-* Install Go (requires >= 1.11) [https://golang.org/doc/install](https://golang.org/doc/install)
+* Install Go (requires >= 1.8) [https://golang.org/doc/install](https://golang.org/doc/install)
 * `go get -u github.com/rothwerx/uptop`
 
 Since Go 1.11 introduced module versioning you'll want to enable the transitional variable to get termui. Change to the uptop source directory and run:
@@ -45,7 +45,6 @@ Distributed under the MIT license. See ``LICENSE`` for more information.
 5. Create a new Pull Request
 
 ## TODO
-* Test on bigger iron (only tested on an AWS t2.nano instance)
 * Non-interactive mode, e.g. allow user to specify -p <pid> for a specific process
 * Static help bar with hotkey hints, or help overlay
-* Why does `--once` print extra newlines
+* Remove column lines
