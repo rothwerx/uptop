@@ -19,6 +19,10 @@ You can quit with 'q' or Ctrl-c. While `uptop` is running, 'p' will sort by PSS,
 
 ## Development setup
 
+Easy way: Run `make` on a host running Docker. It will pull down golang:latest and build in container, resulting in an `uptop` binary in the source directory.
+
+Less easy way:
+
 * Install Go (requires >= 1.8) [https://golang.org/doc/install](https://golang.org/doc/install)
 * `go get -u github.com/rothwerx/uptop`
 
