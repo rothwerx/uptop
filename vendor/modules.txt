@@ -1,0 +1,15 @@
+# github.com/cjbassi/drawille-go v0.1.0
+## explicit
+github.com/cjbassi/drawille-go
+# github.com/gizak/termui v0.0.0-20190214045005-bb0b559103cb
+## explicit
+github.com/gizak/termui
+github.com/gizak/termui/widgets
+# github.com/mattn/go-runewidth v0.0.4
+## explicit
+github.com/mattn/go-runewidth
+# github.com/mitchellh/go-wordwrap v1.0.0
+## explicit
+github.com/mitchellh/go-wordwrap
+# github.com/nsf/termbox-go v0.0.0-20190121233118-02980233997d
+github.com/nsf/termbox-go
